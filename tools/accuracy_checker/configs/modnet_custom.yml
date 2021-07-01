@@ -1,0 +1,26 @@
+models:
+    - name: modnet_custom
+      launchers:
+          - framework: dlsdk
+            adapter: background_matting
+      datasets:
+          - name: CustomBackgroundMatting
+            preprocessing:
+                - type: resize
+                  size: 512
+            postprocessing:
+                - type: resize
+                  apply_to: annotation
+                  size: 512
+                - type: rescale_mask
+                  min: 0
+                  max: 255
+                  apply_to: annotation
+                - type: invert_mask
+                  apply_to: annotation
+            metrics:
+                - type: mae
+                  name: MAD
+                - type: mse
+                  name: MSE
+
