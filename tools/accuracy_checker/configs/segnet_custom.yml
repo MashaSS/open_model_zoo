@@ -1,0 +1,34 @@
+evaluations:
+    - name: segnet
+      module: custom_evaluators.segnet_background_matting.VideoBackgroundMatting
+      module_config:
+          network_info:
+              segnet_model: {}
+          launchers:
+              - framework: dlsdk
+          datasets:
+              -   name: CustomBackgroundMatting_video
+                  reader:
+                      type: opencv_imread
+                      reading_flag: unchanged
+                  preprocessing:
+                      -   type: bgr_to_rgb
+                      -   type: resize
+                          dst_height: 90
+                          dst_width: 160
+                  postprocessing:
+                      -   type: resize
+                          apply_to: prediction
+                      -   type: rescale_mask
+                          min: 0
+                          max: 255
+                          apply_to: annotation
+                      -   type: invert_mask
+                          apply_to: prediction
+                  metrics:
+                      -   type: mae
+                          name: MAD
+                          presenter: print_vector
+                      -   type: mse
+                          name: MSE
+                          presenter: print_vector
