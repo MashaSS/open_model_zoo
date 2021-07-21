@@ -3,6 +3,7 @@
 //
 
 #include <utils/images_capture.h>
+#include <utils/slog.hpp>
 
 #ifdef _WIN32
 #include "w_dirent.hpp"
@@ -104,6 +105,7 @@ public:
 
         while (fileId < names.size() && nextImgId < readLengthLimit) {
             cv::Mat img = cv::imread(input + '/' + names[fileId]);
+            slog::info << "DirReader: image {" << names[fileId] << "}, " << img.cols << "x" << img.rows << slog::endl;
             ++fileId;
             if (img.data) {
                 ++nextImgId;
