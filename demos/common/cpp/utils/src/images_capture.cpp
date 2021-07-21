@@ -146,6 +146,7 @@ public:
             : ImagesCapture{loop}, nextImgId{0}, initialImageId{static_cast<double>(initialImageId)} {
 
         if (cap.open(input)) {
+            slog::info << "VideoCapWrapper: " << input << ", readLengthLimit: " << readLengthLimit << ", initialImageId: " << initialImageId << slog::endl;
             this->readLengthLimit = readLengthLimit;
             if (!cap.set(cv::CAP_PROP_POS_FRAMES, this->initialImageId))
                 throw OpenError("Can't set the frame to begin with");
@@ -166,6 +167,7 @@ public:
                 nextImgId = 1;
                 cv::Mat img;
                 cap.read(img);
+                slog::info << "VideoCapWrapper1: id: " << initialImageId << ", " << img.cols << "x" << img.rows << slog::endl;
                 readerMetrics.update(startTime);
                 return img;
             }
@@ -175,6 +177,7 @@ public:
         if (!cap.read(img) && loop && cap.set(cv::CAP_PROP_POS_FRAMES, initialImageId)) {
             nextImgId = 1;
             cap.read(img);
+            slog::info << "VideoCapWrapper2: " << initialImageId << ", " << img.cols << "x" << img.rows << slog::endl;
         } else {
             ++nextImgId;
         }
