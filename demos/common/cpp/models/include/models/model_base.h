@@ -18,6 +18,7 @@
 #include "input_data.h"
 #include "results.h"
 #include "utils/config_factory.h"
+#include "utils/slog.hpp"
 
 class ModelBase {
 public:
@@ -41,6 +42,8 @@ public:
         auto shapes = cnnNetwork.getInputShapes();
         for (auto& shape : shapes)
             shape.second[0] = 1;
+        for (auto& shape : shapes)
+            slog::info << "    reshape1: " << shape.second[0] << "x" << shape.second[1] << "x" << shape.second[2] << "x" << shape.second[3] << slog::endl;
         cnnNetwork.reshape(shapes);
     }
 

@@ -42,6 +42,7 @@ public:
         if (!file.good())
             throw InvalidInput("Can't find the image by " + input);
 
+        slog::info << "ImreadWrapper: image {" << input << "}, " << img.cols << "x" << img.rows << slog::endl;
         img = cv::imread(input);
         if(!img.data)
             throw OpenError("Can't open the image from " + input);

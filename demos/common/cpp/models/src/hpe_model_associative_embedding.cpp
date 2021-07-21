@@ -97,6 +97,7 @@ void HpeAssociativeEmbedding::changeInputSize(CNNNetwork& cnnNetwork) {
     inputDims[2] = height;
     inputDims[3] = width;
     inputLayerSize = cv::Size(inputDims[3], inputDims[2]);
+    slog::info << "    reshape2: " << inputDims[0] << "x" << inputDims[1] << "x" << inputDims[2] << "x" << inputDims[3] << slog::endl;
     cnnNetwork.reshape(inputShapes);
 }
 
