@@ -17,6 +17,7 @@
 #include "models/model_base.h"
 #include <inference_engine.hpp>
 #include <utils/common.hpp>
+#include <utils/slog.hpp>
 
 using namespace InferenceEngine;
 
@@ -48,6 +49,11 @@ ExecutableNetwork ModelBase::loadExecutableNetwork(const CnnConfig& cnnConfig, I
     this->cnnConfig = cnnConfig;
     auto cnnNetwork = prepareNetwork(core);
     execNetwork = core.LoadNetwork(cnnNetwork, cnnConfig.deviceName, cnnConfig.execNetworkConfig);
+    std::vector<std::string> m = execNetwork.GetMetric(InferenceEngine::Metrics::METRIC_SUPPORTED_CONFIG_KEYS);
+    slog::info << "\tSUPPORTED_CONFIG_KEYS (default values): " << slog::endl;
+    for (auto&& configKey : m) {
+        slog::info << "\t\t" << configKey << " : " << configKey << slog::endl;
+    }
     printExecNetworkInfo(execNetwork, modelFileName, cnnConfig.deviceName);
     return execNetwork;
 }
