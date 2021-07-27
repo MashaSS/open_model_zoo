@@ -251,6 +251,8 @@ public:
         LprOutputName = LprOutputInfo.begin()->first;
         auto lprOutputInfo = (LprOutputInfo.begin());
 
+        lprOutputInfo->second->setPrecision(InferenceEngine::Precision::I32);
+
         maxSequenceSizePerPlate = 1;
         for (size_t dim : lprOutputInfo->second->getTensorDesc().getDims()) {
             if (dim == 1) {
