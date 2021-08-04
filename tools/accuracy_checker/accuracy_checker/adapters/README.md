@@ -30,6 +30,7 @@ AccuracyChecker supports following set of adapters:
   * `classification_output` - target output layer name.
   * `fixed_output` - in `block` mode enables gathering data from a part of full layer output
   * `fixed_output_index` - index into layer output array to gather data from
+  * `label_as_array` - produce ClassificationPrediction's label as array
 * `segmentation` - converting output of semantic segmentation model to `SeegmentationPrediction` representation.
   * `make_argmax` - allows applying argmax operation to output values.
 * `segmentation_one_class` - converting output of semantic segmentation to `SeegmentationPrediction` representation. It is suitable for situation when model's output is probability of belong each pixel to foreground class.
@@ -450,6 +451,7 @@ AccuracyChecker supports following set of adapters:
   * `max_active` - max active paths for decoding (Optional, default `7000`).
   * `inverse_acoustic_scale` - inverse acoustic scale for lattice scaling (Optional, default `0`).
   * `word_insertion_penalty` - add word insertion penalty to the lattice. Penalties are negative log-probs, base e, and are added to the language model' part of the cost (Optional, `0`).
+* `kaldi_feat_regression` - converts output features from kaldi models to `RegressionPrediction` with merging whole matrix features and making deprocessing according context window size, if it is necessary.
 * `quantiles_predictor` - converts output of Time Series Forecasting models to `TimeSeriesForecastingQuantilesPrediction`.
   * `quantiles` - predictions[i]->quantile[i] mapping.
   * `output_name` - name of output node to convert.

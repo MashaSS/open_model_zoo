@@ -13,7 +13,7 @@ This demo can work in 2 modes:
 
 ## Preparing to Run
 
-For demo input image or video files you may refer to [Media Files Available for Demos](../../README.md#Media-Files-Available-for-Demos).
+For demo input image or video files, refer to the section **Media Files Available for Demos** in the [Open Model Zoo Demos Overview](../../README.md).
 The list of models supported by the demo is in `<omz_dir>/demos/image_inpainting_demo/python/models.lst` file.
 This file can be used as a parameter for [Model Downloader](../../../tools/downloader/README.md) and Converter to download and, if necessary, convert models to OpenVINO Inference Engine format (\*.xml + \*.bin).
 
@@ -110,7 +110,10 @@ If Backpace, C or R keys are pressed while demo is showing original image, demo 
 
 ## Demo Output
 
-In auto mode this demo uses OpenCV to display the resulting image and image with mask applied and reports performance in the format of summary inference FPS. Processed image can be also written to file.
+In auto mode the demo uses OpenCV to display the resulting image and image with mask applied. Processed image can be also written to file.
+In auto mode the demo reports
+
+* **Latency**: total processing time required to process input data (from reading the data to displaying the results).
 
 In interactive mode this demo provides interactive means to apply mask and see the result of processing instantly (see hotkeys above).
 

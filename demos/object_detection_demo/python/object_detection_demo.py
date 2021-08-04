@@ -32,10 +32,10 @@ sys.path.append(str(Path(__file__).resolve().parents[2] / 'common/python'))
 
 import models
 import monitors
-from pipelines import get_user_config, AsyncPipeline
+from pipelines import get_user_config, parse_devices, AsyncPipeline
 from images_capture import open_images_capture
 from performance_metrics import PerformanceMetrics
-from helpers import resolution, log_blobs_info, log_runtime_settings
+from helpers import resolution, log_blobs_info, log_runtime_settings, log_latency_per_stage
 
 log.basicConfig(format='[ %(levelname)s ] %(message)s', level=log.DEBUG, stream=sys.stdout)
 
@@ -68,6 +68,12 @@ def build_argparser():
                                    help='Optional. The first image size used for CTPN model reshaping. '
                                         'Default: 600 600. Note that submitted images should have the same resolution, '
                                         'otherwise predictions might be incorrect.')
+    common_model_args.add_argument('--anchors', default=None, type=float, nargs='+',
+                                   help='Optional. A space separated list of anchors. '
+                                        'By default used default anchors for model. Only for YOLOV4 architecture type.')
+    common_model_args.add_argument('--masks', default=None, type=int, nargs='+',
+                                   help='Optional. A space separated list of mask for anchors. '
+                                        'By default used default masks for model. Only for YOLOV4 architecture type.')
 
     infer_args = parser.add_argument_group('Inference options')
     infer_args.add_argument('-nireq', '--num_infer_requests', help='Optional. Number of infer requests',
@@ -119,7 +125,7 @@ class ColorPalette:
         assert n > 0
 
         if rng is None:
-            rng = random.Random(0xACE)
+            rng = random.Random(0xACE) # nosec - disable B311:random check
 
         candidates_num = 100
         hsv_colors = [(1.0, 1.0, 1.0)]
@@ -172,7 +178,8 @@ def get_model(ie, args):
                            threshold=args.prob_threshold, keep_aspect_ratio=args.keep_aspect_ratio)
     elif args.architecture_type == 'yolov4':
         return models.YoloV4(ie, args.model, labels=args.labels,
-                             threshold=args.prob_threshold, keep_aspect_ratio=args.keep_aspect_ratio)
+                             threshold=args.prob_threshold, keep_aspect_ratio=args.keep_aspect_ratio,
+                             anchors=args.anchors, masks=args.masks)
     elif args.architecture_type == 'faceboxes':
         return models.FaceBoxes(*common_args, threshold=args.prob_threshold)
     elif args.architecture_type == 'centernet':
@@ -220,6 +227,10 @@ def print_raw_results(detections, labels, frame_id):
 
 def main():
     args = build_argparser().parse_args()
+    if args.architecture_type != 'yolov4' and args.anchors:
+        log.warning('The "--anchors" options works only for "-at==yolov4". Option will be omitted')
+    if args.architecture_type != 'yolov4' and args.masks:
+        log.warning('The "--masks" options works only for "-at==yolov4". Option will be omitted')
 
     cap = open_images_capture(args.input, args.loop)
 
@@ -237,13 +248,14 @@ def main():
                                       device=args.device, max_num_requests=args.num_infer_requests)
 
     log.info('The model {} is loaded to {}'.format(args.model, args.device))
-    log_runtime_settings(detector_pipeline.exec_net, args.device)
+    log_runtime_settings(detector_pipeline.exec_net, set(parse_devices(args.device)))
 
     next_frame_id = 0
     next_frame_id_to_show = 0
 
     palette = ColorPalette(len(model.labels) if model.labels else 100)
     metrics = PerformanceMetrics()
+    render_metrics = PerformanceMetrics()
     presenter = None
     output_transform = None
     video_writer = cv2.VideoWriter()
@@ -262,7 +274,9 @@ def main():
                 print_raw_results(objects, model.labels, next_frame_id_to_show)
 
             presenter.drawGraphs(frame)
+            rendering_start_time = perf_counter()
             frame = draw_detections(frame, objects, palette, model.labels, output_transform)
+            render_metrics.update(rendering_start_time)
             metrics.update(start_time, frame)
 
             if video_writer.isOpened() and (args.output_limit <= 0 or next_frame_id_to_show <= args.output_limit-1):
@@ -321,7 +335,9 @@ def main():
             print_raw_results(objects, model.labels, next_frame_id_to_show)
 
         presenter.drawGraphs(frame)
+        rendering_start_time = perf_counter()
         frame = draw_detections(frame, objects, palette, model.labels, output_transform)
+        render_metrics.update(rendering_start_time)
         metrics.update(start_time, frame)
 
         if video_writer.isOpened() and (args.output_limit <= 0 or next_frame_id_to_show <= args.output_limit-1):
@@ -338,7 +354,13 @@ def main():
             presenter.handleKey(key)
 
     metrics.log_total()
-    print(presenter.reportMeans())
+    log_latency_per_stage(cap.reader_metrics.get_latency(),
+                          detector_pipeline.preprocess_metrics.get_latency(),
+                          detector_pipeline.inference_metrics.get_latency(),
+                          detector_pipeline.postprocess_metrics.get_latency(),
+                          render_metrics.get_latency())
+    for rep in presenter.reportMeans():
+        log.info(rep)
 
 
 if __name__ == '__main__':

@@ -27,10 +27,10 @@ sys.path.append(str(Path(__file__).resolve().parents[2] / 'common/python'))
 
 from models import Deblurring
 import monitors
-from pipelines import get_user_config, AsyncPipeline
+from pipelines import get_user_config, parse_devices, AsyncPipeline
 from images_capture import open_images_capture
 from performance_metrics import PerformanceMetrics
-from helpers import log_blobs_info, log_runtime_settings
+from helpers import log_blobs_info, log_runtime_settings, log_latency_per_stage
 
 log.basicConfig(format='[ %(levelname)s ] %(message)s', level=log.DEBUG, stream=sys.stdout)
 
@@ -78,6 +78,12 @@ def main():
     args = build_argparser().parse_args()
 
     cap = open_images_capture(args.input, args.loop)
+    next_frame_id = 1
+    next_frame_id_to_show = 0
+
+    metrics = PerformanceMetrics()
+    render_metrics = PerformanceMetrics()
+    video_writer = cv2.VideoWriter()
 
     log.info('OpenVINO Inference Engine')
     log.info('\tbuild: {}'.format(get_version()))
@@ -97,16 +103,12 @@ def main():
     pipeline = AsyncPipeline(ie, model, plugin_config, device=args.device, max_num_requests=args.num_infer_requests)
 
     log.info('The model {} is loaded to {}'.format(args.model, args.device))
-    log_runtime_settings(pipeline.exec_net, args.device)
+    log_runtime_settings(pipeline.exec_net, set(parse_devices(args.device)))
 
     pipeline.submit_data(frame, 0, {'frame': frame, 'start_time': start_time})
-    next_frame_id = 1
-    next_frame_id_to_show = 0
 
-    metrics = PerformanceMetrics()
     presenter = monitors.Presenter(args.utilization_monitors, 55,
                                    (round(frame.shape[1] / 4), round(frame.shape[0] / 8)))
-    video_writer = cv2.VideoWriter()
     if args.output and not video_writer.open(args.output, cv2.VideoWriter_fourcc(*'MJPG'),
                                              cap.fps(), (2 * frame.shape[1], frame.shape[0])):
         raise RuntimeError("Can't open video writer")
@@ -135,9 +137,11 @@ def main():
             input_frame = frame_meta['frame']
             start_time = frame_meta['start_time']
 
+            rendering_start_time = perf_counter()
             if input_frame.shape != result_frame.shape:
                 input_frame = cv2.resize(input_frame, (result_frame.shape[1], result_frame.shape[0]))
             final_image = cv2.hconcat([input_frame, result_frame])
+            render_metrics.update(rendering_start_time)
 
             presenter.drawGraphs(final_image)
             metrics.update(start_time, final_image)
@@ -160,9 +164,11 @@ def main():
             input_frame = frame_meta['frame']
             start_time = frame_meta['start_time']
 
+            rendering_start_time = perf_counter()
             if input_frame.shape != result_frame.shape:
                 input_frame = cv2.resize(input_frame, (result_frame.shape[1], result_frame.shape[0]))
             final_image = cv2.hconcat([input_frame, result_frame])
+            render_metrics.update(rendering_start_time)
 
             presenter.drawGraphs(final_image)
             metrics.update(start_time, final_image)
@@ -176,7 +182,13 @@ def main():
             break
 
     metrics.log_total()
-    print(presenter.reportMeans())
+    log_latency_per_stage(cap.reader_metrics.get_latency(),
+                          pipeline.preprocess_metrics.get_latency(),
+                          pipeline.inference_metrics.get_latency(),
+                          pipeline.postprocess_metrics.get_latency(),
+                          render_metrics.get_latency())
+    for rep in presenter.reportMeans():
+        log.info(rep)
 
 
 if __name__ == '__main__':

@@ -29,9 +29,9 @@ sys.path.append(str(Path(__file__).resolve().parents[2] / 'common/python'))
 import models
 import monitors
 from images_capture import open_images_capture
-from pipelines import get_user_config, AsyncPipeline
+from pipelines import get_user_config, parse_devices, AsyncPipeline
 from performance_metrics import PerformanceMetrics
-from helpers import resolution, log_blobs_info, log_runtime_settings
+from helpers import resolution, log_blobs_info, log_runtime_settings, log_latency_per_stage
 
 log.basicConfig(format='[ %(levelname)s ] %(message)s', level=log.DEBUG, stream=sys.stdout)
 
@@ -167,6 +167,12 @@ def main():
     args = build_argparser().parse_args()
 
     cap = open_images_capture(args.input, args.loop)
+    next_frame_id = 1
+    next_frame_id_to_show = 0
+
+    metrics = PerformanceMetrics()
+    render_metrics = PerformanceMetrics()
+    video_writer = cv2.VideoWriter()
 
     log.info('OpenVINO Inference Engine')
     log.info('\tbuild: {}'.format(get_version()))
@@ -186,13 +192,10 @@ def main():
     hpe_pipeline = AsyncPipeline(ie, model, plugin_config, device=args.device, max_num_requests=args.num_infer_requests)
 
     log.info('The model {} is loaded to {}'.format(args.model, args.device))
-    log_runtime_settings(hpe_pipeline.exec_net, args.device)
+    log_runtime_settings(hpe_pipeline.exec_net, set(parse_devices(args.device)))
 
     hpe_pipeline.submit_data(frame, 0, {'frame': frame, 'start_time': start_time})
-    next_frame_id = 1
-    next_frame_id_to_show = 0
 
-    metrics = PerformanceMetrics()
     output_transform = models.OutputTransform(frame.shape[:2], args.output_resolution)
     if args.output_resolution:
         output_resolution = output_transform.new_resolution
@@ -200,7 +203,6 @@ def main():
         output_resolution = (frame.shape[1], frame.shape[0])
     presenter = monitors.Presenter(args.utilization_monitors, 55,
                                    (round(output_resolution[0] / 4), round(output_resolution[1] / 8)))
-    video_writer = cv2.VideoWriter()
     if args.output and not video_writer.open(args.output, cv2.VideoWriter_fourcc(*'MJPG'), cap.fps(),
             output_resolution):
         raise RuntimeError("Can't open video writer")
@@ -219,7 +221,9 @@ def main():
                 print_raw_results(poses, scores, next_frame_id_to_show)
 
             presenter.drawGraphs(frame)
+            rendering_start_time = perf_counter()
             frame = draw_poses(frame, poses, args.prob_threshold, output_transform)
+            render_metrics.update(rendering_start_time)
             metrics.update(start_time, frame)
             if video_writer.isOpened() and (args.output_limit <= 0 or next_frame_id_to_show <= args.output_limit-1):
                 video_writer.write(frame)
@@ -264,7 +268,9 @@ def main():
             print_raw_results(poses, scores, next_frame_id_to_show)
 
         presenter.drawGraphs(frame)
+        rendering_start_time = perf_counter()
         frame = draw_poses(frame, poses, args.prob_threshold, output_transform)
+        render_metrics.update(rendering_start_time)
         metrics.update(start_time, frame)
         if video_writer.isOpened() and (args.output_limit <= 0 or next_frame_id_to_show <= args.output_limit-1):
             video_writer.write(frame)
@@ -279,7 +285,13 @@ def main():
             presenter.handleKey(key)
 
     metrics.log_total()
-    print(presenter.reportMeans())
+    log_latency_per_stage(cap.reader_metrics.get_latency(),
+                          hpe_pipeline.preprocess_metrics.get_latency(),
+                          hpe_pipeline.inference_metrics.get_latency(),
+                          hpe_pipeline.postprocess_metrics.get_latency(),
+                          render_metrics.get_latency())
+    for rep in presenter.reportMeans():
+        log.info(rep)
 
 
 if __name__ == '__main__':

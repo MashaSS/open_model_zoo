@@ -41,7 +41,7 @@ Async API operates with a notion of the "Infer Request" that encapsulates the in
 
 ## Preparing to Run
 
-For demo input image or video files you may refer to [Media Files Available for Demos](../../README.md#Media-Files-Available-for-Demos).
+For demo input image or video files, refer to the section **Media Files Available for Demos** in the [Open Model Zoo Demos Overview](../../README.md).
 The list of models supported by the demo is in `<omz_dir>/demos/object_detection_demo/python/models.lst` file.
 This file can be used as a parameter for [Model Downloader](../../../tools/downloader/README.md) and Converter to download and, if necessary, convert models to OpenVINO Inference Engine format (\*.xml + \*.bin).
 
@@ -185,6 +185,12 @@ Common model options:
                         reshaping. Default: 600 600. Note that submitted
                         images should have the same resolution, otherwise
                         predictions might be incorrect.
+  --anchors ANCHORS [ANCHORS ...]
+                        Optional. A space separated list of anchors. By default used default anchors for model. Only
+                        for YOLOV4 architecture type.
+  --masks MASKS [MASKS ...]
+                        Optional. A space separated list of mask for anchors. By default used default masks for model.
+                        Only for YOLOV4 architecture type.
 
 Inference options:
   -nireq NUM_INFER_REQUESTS, --num_infer_requests NUM_INFER_REQUESTS

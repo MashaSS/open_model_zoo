@@ -111,7 +111,7 @@ source <openvino_dir>/bin/setupvars.sh
 
 python3 speech_recognition_deepspeech_demo.py \
     -p mds08x_en \
-    -m <path_to_model>/mozilla_deepspeech_0.8.2.xml \
+    -m <path_to_model>/mozilla-deepspeech-0.8.2.xml \
     -L <path_to_file>/deepspeech-0.8.2-models.kenlm \
     -i <path_to_audio>/audio.wav
 ```
@@ -121,7 +121,7 @@ For version 0.6.1 it is:
 ```shell
 python3 speech_recognition_deepspeech_demo.py \
     -p mds06x_en \
-    -m <path_to_model>/mozilla_deepspeech_0.6.1.xml \
+    -m <path_to_model>/mozilla-deepspeech0-0.6.1.xml \
     -L <path_to_file>/lm.binary \
     -i <path_to_audio>/audio.wav
 ```
@@ -135,6 +135,9 @@ Optional (but highly recommended) language model files, `deepspeech-0.8.2-models
 ## Demo Output
 
 The application shows time taken by the initialization and processing stages, and the decoded text for the audio file. In real-time mode the current recognition result is shown while the app is running as well.
+In offline mode the demo reports
+
+* **Latency**: total processing time required to process input data (from reading the data to displaying the results).
 
 ## See Also
 

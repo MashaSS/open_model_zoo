@@ -42,7 +42,7 @@ import shutil
 import sys
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET # nosec - disable B405:import-xml-etree check
 
 from pathlib import Path
 
@@ -57,6 +57,8 @@ sys.path.append(str(OMZ_ROOT / 'ci/lib'))
 import omzdocs
 
 all_images_paths = {}
+all_md_paths = {}
+documentation_md_paths = set()
 
 XML_ID_ATTRIBUTE = '{http://www.w3.org/XML/1998/namespace}id'
 
@@ -71,17 +73,27 @@ HUMAN_READABLE_TASK_TYPES = {
     'text_to_speech': 'Text-to-speech',
 }
 
-def add_page(output_root, parent, *, id=None, path=None, title=None):
+def add_page(output_root, parent, *, id=None, path=None, title=None, index=-1):
+    if not isinstance(index, int):
+        raise ValueError('index must be an integer')
     if parent.tag == 'tab':
         parent.attrib['type'] = 'usergroup'
 
-    element = ET.SubElement(parent, 'tab', type='user', title=title, url='@ref ' + id if id else '')
-
+    element = ET.Element('tab')
+    element.attrib['type'] = 'user'
+    element.attrib['title'] = title
+    element.attrib['url'] = '@ref ' + id if id else ''
+    if index == -1:
+        parent.append(element)
+    else:
+        parent.insert(index, element)
     if not path:
         assert title, "title must be specified if path isn't"
 
         element.attrib['title'] = title
         return element
+
+    documentation_md_paths.add(Path(path))
 
     output_path = output_root / path
 
@@ -132,23 +144,25 @@ def add_page(output_root, parent, *, id=None, path=None, title=None):
         (output_root / image_rel_path.parent).mkdir(parents=True, exist_ok=True)
         shutil.copyfile(image_abs_path, output_root / image_rel_path)
 
-    non_md_links = [ref.url for ref in page.external_references()
-                    if ref.type == 'link' and not ref.url.endswith('.md')]
+    links = [ref.url for ref in page.external_references() if ref.type == 'link']
 
-    for non_md_link in non_md_links:
-        parsed_non_md_link = urllib.parse.urlparse(non_md_link)
+    for link in links:
+        parsed_link = urllib.parse.urlparse(link)
 
-        if parsed_non_md_link.scheme or parsed_non_md_link.netloc:
+        if parsed_link.scheme or parsed_link.netloc:
             continue # not a relative URL
 
-        if parsed_non_md_link.fragment:
+        if parsed_link.fragment:
             continue # link to markdown section
 
-        relative_path = (OMZ_ROOT / Path(path).parent / non_md_link).resolve().relative_to(OMZ_ROOT)
-        suggested_path = OMZ_PREFIX + Path(relative_path).as_posix()
+        relative_path = (OMZ_ROOT / Path(path).parent / link).resolve().relative_to(OMZ_ROOT)
 
-        raise RuntimeError(f'{path}: Relative link to non-markdown file "{non_md_link}". '
-                           f'Replace it by `{suggested_path}`')
+        if link.endswith('.md'):
+            all_md_paths[relative_path] = Path(path)
+        else:
+            suggested_path = OMZ_PREFIX + Path(relative_path).as_posix()
+            raise RuntimeError(f'{path}: Relative link to non-markdown file "{link}". '
+                               f'Replace it by `{suggested_path}`')
 
     return element
 
@@ -227,6 +241,7 @@ def add_model_pages(output_root, parent_element, group, group_title):
         # dumper doesn't support composite models yet.
         model_yml_path = OMZ_ROOT / 'models' / group / model_name / 'model.yml'
         composite_model_yml_path = model_yml_path.with_name('composite-model.yml')
+        is_new_intel_model = False
 
         if model_yml_path.exists():
             expected_title = model_name
@@ -246,7 +261,10 @@ def add_model_pages(output_root, parent_element, group, group_title):
             logging.warning(
                 '{}: no corresponding model.yml or composite-model.yml found; skipping'
                     .format(md_path_rel))
-            continue
+            if group == 'intel':
+                is_new_intel_model = True
+            else:
+                continue
 
         if task_type not in task_type_elements:
             human_readable_task_type = HUMAN_READABLE_TASK_TYPES.get(task_type,
@@ -264,10 +282,16 @@ def add_model_pages(output_root, parent_element, group, group_title):
         model_element = add_page(output_root, task_type_elements[task_type],
             id=page_id, path=md_path_rel)
 
-        if model_element.attrib['title'] != expected_title:
+        if model_element.attrib['title'] != expected_title and not is_new_intel_model:
             raise RuntimeError(f'{md_path_rel}: should have title "{expected_title}"')
 
     sort_titles(group_element)
+
+    device_support_title = 'Intel\'s Pre-Trained Models Device Support' if group == 'intel' \
+        else 'Public Pre-Trained Models Device Support'
+    add_page(output_root, group_element,
+             id=f'omz_models_{group}_device_support', path=f'models/{group}/device_support.md',
+             title=device_support_title, index=0)
 
 
 def main():
@@ -288,16 +312,6 @@ def main():
 
     add_accuracy_checker_pages(output_root, navindex_element)
 
-    datasets_element = add_page(output_root, navindex_element,
-        id='omz_data_datasets', path='data/datasets.md')
-
-    # The xml:id here is omz_data rather than omz_data_datasets, because
-    # later we might want to have other pages in the "data" directory. If
-    # that happens, we'll create a parent page with ID "omz_data" and move
-    # the xml:id to that page, thus integrating the new pages without having
-    # to change the upstream OpenVINO documentation building process.
-    datasets_element.attrib[XML_ID_ATTRIBUTE] = 'omz_data'
-
     downloader_element = add_page(output_root, navindex_element,
         id='omz_tools_downloader', path='tools/downloader/README.md', title='Model Downloader')
     downloader_element.attrib[XML_ID_ATTRIBUTE] = 'omz_tools_downloader'
@@ -310,6 +324,16 @@ def main():
         'intel', "Intel's Pre-trained Models")
     add_model_pages(output_root, trained_models_group_element,
         'public', "Public Pre-trained Models")
+
+    datasets_element = add_page(output_root, navindex_element,
+        id='omz_data_datasets', path='data/datasets.md', title='Dataset Preparation Guide')
+
+    # The xml:id here is omz_data rather than omz_data_datasets, because
+    # later we might want to have other pages in the "data" directory. If
+    # that happens, we'll create a parent page with ID "omz_data" and move
+    # the xml:id to that page, thus integrating the new pages without having
+    # to change the upstream OpenVINO documentation building process.
+    datasets_element.attrib[XML_ID_ATTRIBUTE] = 'omz_data'
 
     demos_group_element = add_page(output_root, navindex_element,
         title="Demos", id='omz_demos', path='demos/README.md')
@@ -348,6 +372,12 @@ def main():
             raise RuntimeError(f'{md_path_rel}: title must contain "Demo"')
 
     sort_titles(demos_group_element)
+
+    for md_path in all_md_paths:
+        if md_path not in documentation_md_paths:
+            raise RuntimeError(f'{all_md_paths[md_path]}: '
+                               f'Relative link to non-online documentation file "{md_path}". '
+                               f'Replace it by `{OMZ_PREFIX + md_path.as_posix()}`')
 
     with (output_root / 'DoxygenLayout.xml').open('wb') as layout_file:
         ET.ElementTree(doxygenlayout_element).write(layout_file)
